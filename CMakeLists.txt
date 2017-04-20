@@ -157,7 +157,7 @@ if(ENABLE_GOLD_LINKER)
     execute_process(COMMAND ${CMAKE_C_COMPILER} -fuse-ld=gold -Wl,--version ERROR_QUIET OUTPUT_VARIABLE LD_VERSION)
     if("${LD_VERSION}" MATCHES "GNU gold")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold -Wl,--disable-new-dtags")
-        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold -Wl,--disable-new-dtags")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold -Wl -v,--disable-new-dtags")
         set(OSRM_LDFLAGS "${OSRM_LDFLAGS} -fuse-ld=gold -Wl,--disable-new-dtags")
         message(STATUS "Using GNU gold as linker.")
 
@@ -377,7 +377,7 @@ endif()
 
 # Configuring other platform dependencies
 if(APPLE)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "10.10")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "10.11")
   execute_process(COMMAND xcrun --sdk macosx --show-sdk-path OUTPUT_VARIABLE CMAKE_OSX_SYSROOT OUTPUT_STRIP_TRAILING_WHITESPACE)
   set(CMAKE_OSX_ARCHITECTURES "x86_64")
   message(STATUS "Set Architecture to x64 on OS X")

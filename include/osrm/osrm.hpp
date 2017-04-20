@@ -44,6 +44,7 @@ using engine::api::NearestParameters;
 using engine::api::TripParameters;
 using engine::api::MatchParameters;
 using engine::api::TileParameters;
+using engine::api::TourParameters;
 
 /**
  * Represents a Open Source Routing Machine with access to its services.
@@ -129,6 +130,15 @@ class OSRM final
      * \see Status, TileParameters and json::Object
      */
     Status Tile(const TileParameters &parameters, std::string &result) const;
+
+    /**
+     * Tour: TODO:
+     *
+     * \param parameters tour query specific parameters
+     * \return Status indicating success for the query or failure
+     * \see Status, TourParameters and json::Object
+     */
+    Status Tour(const TourParameters &parameters, json::Object &result) const;
 
   private:
     std::unique_ptr<engine::EngineInterface> engine_;

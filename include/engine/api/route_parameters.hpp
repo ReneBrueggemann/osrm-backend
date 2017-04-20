@@ -32,12 +32,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <vector>
 
-namespace osrm
-{
-namespace engine
-{
-namespace api
-{
+namespace osrm {
+    namespace engine {
+        namespace api {
 
 /**
  * Parameters specific to the OSRM Route service.

@@ -7,6 +7,7 @@
 #include "engine/api/table_parameters.hpp"
 #include "engine/api/tile_parameters.hpp"
 #include "engine/api/trip_parameters.hpp"
+#include "engine/api/tour_parameters.hpp"
 #include "engine/data_watchdog.hpp"
 #include "engine/datafacade/contiguous_block_allocator.hpp"
 #include "engine/datafacade_provider.hpp"
@@ -18,6 +19,7 @@
 #include "engine/plugins/tile.hpp"
 #include "engine/plugins/trip.hpp"
 #include "engine/plugins/viaroute.hpp"
+#include "engine/plugins/tour.hpp"
 #include "engine/routing_algorithms.hpp"
 #include "engine/status.hpp"
 #include "util/exception.hpp"
@@ -46,7 +48,10 @@ class EngineInterface
                         util::json::Object &result) const = 0;
     virtual Status Match(const api::MatchParameters &parameters,
                          util::json::Object &result) const = 0;
-    virtual Status Tile(const api::TileParameters &parameters, std::string &result) const = 0;
+    virtual Status Tile(const api::TileParameters &parameters,
+                        std::string &result) const = 0;
+    virtual Status Tour(const api::TourParameters &parameters,
+                         util::json::Object &result) const = 0;
 };
 
 template <typename Algorithm> class Engine final : public EngineInterface
@@ -58,7 +63,8 @@ template <typename Algorithm> class Engine final : public EngineInterface
           nearest_plugin(config.max_results_nearest),        //
           trip_plugin(config.max_locations_trip),            //
           match_plugin(config.max_locations_map_matching),   //
-          tile_plugin()                                      //
+          tile_plugin(),                                     //
+          tour_plugin(config.max_locations_viaroute)         //
 
     {
         if (config.use_shared_memory)
@@ -128,6 +134,14 @@ template <typename Algorithm> class Engine final : public EngineInterface
         return tile_plugin.HandleRequest(*facade, algorithms, params, result);
     }
 
+    Status Tour(const api::TourParameters &params,
+                util::json::Object &result) const override final
+    {
+        auto facade = facade_provider->Get();
+        auto algorithms = RoutingAlgorithms<Algorithm>{heaps, *facade};
+        return tour_plugin.HandleRequest(*facade, algorithms, params, result);
+    }
+
     static bool CheckCompability(const EngineConfig &config);
 
   private:
@@ -140,6 +154,7 @@ template <typename Algorithm> class Engine final : public EngineInterface
     const plugins::TripPlugin trip_plugin;
     const plugins::MatchPlugin match_plugin;
     const plugins::TilePlugin tile_plugin;
+    const plugins::TourPlugin tour_plugin;
 };
 
 template <>

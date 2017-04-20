@@ -6,6 +6,7 @@
 #include "server/service/table_service.hpp"
 #include "server/service/tile_service.hpp"
 #include "server/service/trip_service.hpp"
+#include "server/service/tour_service.hpp"
 
 #include "server/api/parsed_url.hpp"
 #include "util/json_util.hpp"
@@ -24,6 +25,7 @@ ServiceHandler::ServiceHandler(osrm::EngineConfig &config) : routing_machine(con
     service_map["trip"] = std::make_unique<service::TripService>(routing_machine);
     service_map["match"] = std::make_unique<service::MatchService>(routing_machine);
     service_map["tile"] = std::make_unique<service::TileService>(routing_machine);
+    service_map["tour"] = std::make_unique<service::TourService>(routing_machine);
 }
 
 engine::Status ServiceHandler::RunQuery(api::ParsedURL parsed_url,
