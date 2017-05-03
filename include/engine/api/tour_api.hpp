@@ -65,7 +65,7 @@ namespace osrm
                                                      raw_tour.alt_target_traversed_in_reverse);
                     }
                     response.values["waypoints"] = BaseAPI::MakeWaypoints(raw_tour.segment_end_coordinates);
-                    response.values["tours"] = std::move(tours);
+                    response.values["routes"] = std::move(tours);
                     response.values["code"] = "Ok";
                 }
 
@@ -189,7 +189,7 @@ namespace osrm
                         legs.push_back(std::move(leg));
                     }
 
-                    auto tour = guidance::assembleRoute(legs);
+                    auto tour = guidance::assembleRoute(legs); //
                     boost::optional<util::json::Value> json_overview;
                     if (parameters.overview != TourParameters::OverviewType::False)
                     {

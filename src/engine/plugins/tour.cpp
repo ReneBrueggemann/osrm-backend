@@ -125,8 +125,8 @@ namespace osrm
                 // allow for connection in one direction.
                 if (raw_route.is_valid())
                 {
-                    api::TourAPI route_api{facade, tour_parameters};
-                    route_api.MakeResponse(raw_route, json_result);
+                    api::TourAPI tour_api{facade, tour_parameters};
+                    tour_api.MakeResponse(raw_route, json_result);
                 }
                 else
                 {
