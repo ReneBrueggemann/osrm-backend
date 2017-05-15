@@ -30,10 +30,10 @@ namespace osrm
             class TourPlugin final : public BasePlugin
             {
             private:
-                const int max_locations_viaroute;
+                const int max_locations_tour;
 
             public:
-                explicit TourPlugin(int max_locations_viaroute);
+                explicit TourPlugin(int max_locations_tour_) : max_locations_tour(max_locations_tour_) {}
 
                 Status HandleRequest(const datafacade::ContiguousInternalMemoryDataFacadeBase &facade,
                                      const RoutingAlgorithmsInterface &algorithms,

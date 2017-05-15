@@ -47,8 +47,7 @@ namespace osrm
                 auto &json_result = result.get<util::json::Object>();
 
                 auto query_iterator = query.begin();
-                auto parameters =
-                        api::parseParameters<engine::api::TourParameters>(query_iterator, query.end());
+                auto parameters = api::parseParameters<engine::api::TourParameters>(query_iterator, query.end());
                 if (!parameters || query_iterator != query.end())
                 {
                     const auto position = std::distance(query.begin(), query_iterator);
