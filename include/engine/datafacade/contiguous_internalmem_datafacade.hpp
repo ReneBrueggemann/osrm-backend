@@ -700,6 +700,13 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
             input_coordinate, max_results, max_distance, bearing, bearing_range);
     }
 
+    // TODO: const override final?
+    std::pair<NodeID, NodeID> GetNearestNodeIDs(const util::Coordinate input_coordinate) const{
+        BOOST_ASSERT(m_geospatial_query.get());
+
+        return m_geospatial_query->NearestNodeIDs(input_coordinate);
+    }
+
     std::pair<PhantomNode, PhantomNode> NearestPhantomNodeWithAlternativeFromBigComponent(
         const util::Coordinate input_coordinate) const override final
     {

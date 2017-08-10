@@ -57,6 +57,7 @@ using OSMEdgeID_weak = std::uint64_t;
 using NodeID = std::uint32_t;
 using EdgeID = std::uint32_t;
 using NameID = std::uint32_t;
+using EdgeDistance = std::int32_t;
 using EdgeWeight = std::int32_t;
 using TurnPenalty = std::int16_t; // turn penalty in 100ms units
 
@@ -85,6 +86,7 @@ static const EdgeID SPECIAL_EDGEID = std::numeric_limits<EdgeID>::max();
 static const NameID INVALID_NAMEID = std::numeric_limits<NameID>::max();
 static const NameID EMPTY_NAMEID = 0;
 static const unsigned INVALID_COMPONENTID = 0;
+static const EdgeDistance INVALID_EDGE_DISTANCE = std::numeric_limits<EdgeDistance>::max();
 static const EdgeWeight INVALID_EDGE_WEIGHT = std::numeric_limits<EdgeWeight>::max();
 static const EdgeWeight MAXIMAL_EDGE_DURATION = std::numeric_limits<EdgeWeight>::max();
 static const TurnPenalty INVALID_TURN_PENALTY = std::numeric_limits<TurnPenalty>::max();

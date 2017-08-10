@@ -19,7 +19,7 @@ namespace osrm {
                 TourParameters() = default;
 
                 template<typename... Args>
-                TourParameters(const float length_,
+                TourParameters(const EdgeDistance length_,
                                const bool steps_,
                                const bool alternatives_,
                                const GeometriesType geometries_,
@@ -34,7 +34,7 @@ namespace osrm {
 
                 // TourParameters constructor adding the `annotations` setting in a API-compatible way.
                 template<typename... Args>
-                TourParameters(const float length_,
+                TourParameters(const EdgeDistance length_,
                                const bool steps_,
                                const bool alternatives_,
                                const bool annotations_,
@@ -49,7 +49,7 @@ namespace osrm {
 
                 // enum based implementation of annotations parameter
                 template<typename... Args>
-                TourParameters(const float length_,
+                TourParameters(const EdgeDistance length_,
                                const bool steps_,
                                const bool alternatives_,
                                const AnnotationsType annotations_,
@@ -63,9 +63,10 @@ namespace osrm {
                 }
 
             public:
-                float length = 0.0f;
+                EdgeDistance length = 0;
+                float epsilon = 0.0f;
 
-                bool IsValid() const { return coordinates.size() >= 2 && BaseParameters::IsValid(); }
+                bool IsValid() const { return coordinates.size() == 1 && BaseParameters::IsValid(); }
             };
         }
     }

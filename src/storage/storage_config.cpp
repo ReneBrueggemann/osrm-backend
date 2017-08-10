@@ -25,10 +25,11 @@ bool CheckFileList(const std::vector<boost::filesystem::path> &files)
 }
 
 StorageConfig::StorageConfig(const boost::filesystem::path &base)
-    : ram_index_path{base.string() + ".ramIndex"}, file_index_path{base.string() + ".fileIndex"},
-      hsgr_data_path{base.string() + ".hsgr"}, nodes_data_path{base.string() + ".nodes"},
-      edges_data_path{base.string() + ".edges"}, core_data_path{base.string() + ".core"},
-      geometries_path{base.string() + ".geometry"}, timestamp_path{base.string() + ".timestamp"},
+    : base_path{base.string()}, ram_index_path{base.string() + ".ramIndex"},
+      file_index_path{base.string() + ".fileIndex"}, hsgr_data_path{base.string() + ".hsgr"},
+      nodes_data_path{base.string() + ".nodes"}, edges_data_path{base.string() + ".edges"},
+      core_data_path{base.string() + ".core"}, geometries_path{base.string() + ".geometry"},
+      timestamp_path{base.string() + ".timestamp"},
       turn_weight_penalties_path{base.string() + ".turn_weight_penalties"},
       turn_duration_penalties_path{base.string() + ".turn_duration_penalties"},
       datasource_names_path{base.string() + ".datasource_names"},
@@ -43,7 +44,8 @@ StorageConfig::StorageConfig(const boost::filesystem::path &base)
 bool StorageConfig::IsValid() const
 {
     // Common files
-    if (!CheckFileList({ram_index_path,
+    if (!CheckFileList({base_path,
+                        ram_index_path,
                         file_index_path,
                         nodes_data_path,
                         edges_data_path,

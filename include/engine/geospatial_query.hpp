@@ -205,6 +205,46 @@ template <typename RTreeT, typename DataFacadeT> class GeospatialQuery
                               MakePhantomNode(input_coordinate, results.back()).phantom_node);
     }
 
+    std::pair<NodeID, NodeID> NearestNodeIDs(const util::Coordinate input_coordinate) const
+    {
+        bool has_small_component = false;
+        bool has_big_component = false;
+        auto results = rtree.Nearest(
+                input_coordinate,
+                [this, &has_big_component, &has_small_component](const CandidateSegment &segment) {
+                    auto use_segment = (!has_small_component ||
+                                        (!has_big_component && !segment.data.component.is_tiny));
+                    auto use_directions = std::make_pair(use_segment, use_segment);
+                    if (!use_directions.first && !use_directions.second)
+                        return use_directions;
+                    const auto valid_edges = HasValidEdge(segment);
+
+                    if (valid_edges.first || valid_edges.second)
+                    {
+
+                        has_big_component = has_big_component || !segment.data.component.is_tiny;
+                        has_small_component = has_small_component || segment.data.component.is_tiny;
+                    }
+
+                    use_directions = boolPairAnd(use_directions, valid_edges);
+                    return use_directions;
+                },
+                [&has_big_component](const std::size_t num_results, const CandidateSegment &) {
+                    return num_results > 0 && has_big_component;
+                });
+
+        if (results.size() == 0)
+        {
+            return std::make_pair(SPECIAL_NODEID, SPECIAL_NODEID);
+        }
+
+
+
+        BOOST_ASSERT(results.size() == 1 || results.size() == 2);
+        return std::make_pair(results.back().u,
+                              results.back().v);
+    }
+
     // Returns the nearest phantom node. If this phantom node is not from a big component
     // a second phantom node is return that is the nearest coordinate in a big component.
     std::pair<PhantomNode, PhantomNode>

@@ -33,10 +33,12 @@ namespace osrm
 
                 TourParametersGrammar() : BaseGrammar(root_rule)
                 {
-                    tour_rule = (qi::lit("length=") >
-                             qi::float_[ph::bind(&engine::api::TourParameters::length, qi::_r1) = qi::_1]
-                    | (qi::lit("alternatives=") >
-                       qi::bool_[ph::bind(&engine::api::RouteParameters::alternatives, qi::_r1) = qi::_1]));
+                    tour_rule = ( (qi::lit("length=") > qi::int_[ph::bind(&engine::api::TourParameters::length, qi::_r1) = qi::_1])
+                        | (qi::lit("epsilon=") > qi::float_[ph::bind(&engine::api::TourParameters::epsilon, qi::_r1) = qi::_1])
+                        | (qi::lit("alternatives=") > qi::bool_[ph::bind(&engine::api::RouteParameters::alternatives, qi::_r1) = qi::_1])
+                        | (qi::lit("continue_straight=") > (qi::lit("default") | qi::bool_[ph::bind(&engine::api::RouteParameters::continue_straight, qi::_r1) =
+                                              qi::_1]))
+                    );
 
                     root_rule = BaseGrammar::query_rule(qi::_r1) > -qi::lit(".json") >
                     -('?' > (tour_rule(qi::_r1) | BaseGrammar::base_rule(qi::_r1) ) %

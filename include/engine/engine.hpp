@@ -64,7 +64,7 @@ template <typename Algorithm> class Engine final : public EngineInterface
           trip_plugin(config.max_locations_trip),            //
           match_plugin(config.max_locations_map_matching),   //
           tile_plugin(),                                     //
-          tour_plugin(config.max_locations_viaroute)         //
+          tour_plugin(config.storage_config)                                      //
 
     {
         if (config.use_shared_memory)
