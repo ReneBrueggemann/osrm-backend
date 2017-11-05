@@ -3,27 +3,14 @@
 //
 
 #include "engine/plugins/tour.hpp"
-#include "engine/routing_algorithms.hpp"
-#include "engine/status.hpp"
-#include "engine/algorithm.hpp"
-#include "engine/engine_config.hpp"
 
-#include "util/for_each_pair.hpp"
-#include "util/integer_range.hpp"
-#include "util/json_container.hpp"
-#include "util/log.hpp"
-#include "util/coordinate.hpp"
 #include "util/kml_writer.hpp"
-#include "util/timing_util.hpp"
 
-#include <cstdlib>
 
-#include <algorithm>
-#include <memory>
-#include <string>
-#include <vector>
+
 #include <thread>
-#include <ctime>
+#include <stdlib.h>     /* srand, rand */
+#include <time.h>
 
 namespace osrm
 {
@@ -33,8 +20,8 @@ namespace osrm
         {
 
             void TourPlugin::dijkstra(NodeID start, const EdgeDistance length,
-                                      std::map<NodeID, NodeID> &parent, std::map<NodeID, std::int32_t> &weight,
-                                      std::map<NodeID, EdgeDistance> &distance) const {
+                                      Map<NodeID, NodeID> &parent, Map<NodeID, EdgeWeight> &weight,
+                                      Map<NodeID, EdgeDistance> &distance) const {
                 TourEdgeData data;
                 NodeID source, target;
                 QueryHeap queryHeap(graph.GetNumberOfNodes());
@@ -58,21 +45,23 @@ namespace osrm
                             continue;
                         }
 
-                        EdgeDistance ways_lenght = distance[source] + data.distance;
+                        EdgeDistance ways_length = distance[source] + data.distance;
                         EdgeWeight ways_weight = weight[source] + data.weight;
 
-                        if(ways_lenght > length){
+                        if(ways_length > length){
                             continue;
                         }
 
-                        if(!queryHeap.WasInserted(target)){
+                        if(!queryHeap.WasInserted(target)) {
                             weight[target] = ways_weight;
-                            distance[target] = ways_lenght;
+                            distance[target] = ways_length;
                             parent[target] = source;
-                            queryHeap.Insert(target, distance[target], source);
-                        }else if(ways_lenght < distance[target]){
+                            if (distance[target] < length) {
+                                queryHeap.Insert(target, distance[target], source);
+                            }
+                        }else if(ways_length < distance[target]){
                             weight[target] = ways_weight;
-                            distance[target] = ways_lenght;
+                            distance[target] = ways_length;
                             parent[target] = source;
                             queryHeap.GetData(target).parent = source;
                             queryHeap.DecreaseKey(target, distance[target]);
@@ -81,6 +70,22 @@ namespace osrm
 
                 }
             }
+
+
+            NodeID TourPlugin::SearchNearestNodeOfInterest(util::Coordinate coordinate) const{
+                EdgeDistance min_distance = INVALID_EDGE_DISTANCE;
+                NodeID nearest_node_id = SPECIAL_NODEID;
+                for(NodeID id = 0; id < nodes_of_interest.size(); id++){
+                    NodeID osrm_node_id = nodes_of_interest[id];
+                    EdgeDistance distance = util::coordinate_calculation::haversineDistance(coordinate, coordinate_list[osrm_node_id]);
+                    if(distance < min_distance){
+                        nearest_node_id = id;
+                        min_distance = distance;
+                    }
+                }
+                return nearest_node_id;
+            }
+
 
             Status
             TourPlugin::HandleRequest(const datafacade::ContiguousInternalMemoryDataFacadeBase &facade,
@@ -111,7 +116,10 @@ namespace osrm
                 }
 
                 // Ermittel die naheliegendste NodeID
-                auto start = facade.GetNearestNodeIDs(tour_parameters.coordinates.back());
+                //auto start = facade.GetNearestNodeIDs(tour_parameters.coordinates.back()).first;
+
+
+                NodeID start = SearchNearestNodeOfInterest(tour_parameters.coordinates[0]);
 
                 length = tour_parameters.length;
                 epsilon = tour_parameters.epsilon;
@@ -127,16 +135,18 @@ namespace osrm
                  *      c'          →       distances
                  *  parents'        →       parents
                  */
-                std::map<NodeID , NodeID> parents;
-                std::map<NodeID , EdgeWeight> weights;
-                std::map<NodeID , EdgeDistance> distances;
-
+                //Map<NodeID , NodeID> parents;
+                //Map<NodeID , EdgeWeight> weights;
+                //Map<NodeID , EdgeDistance> distances;
+                Map<NodeID , NodeID> parents;
+                Map<NodeID , EdgeWeight> weights;
+                Map<NodeID, EdgeDistance> distances;
                 EdgeDistance max_len = (EdgeDistance)((1 + epsilon) * length / 4);
                 EdgeDistance min_len = (EdgeDistance)((1 - epsilon) * length / 4);
 
                 TIMER_START(dijkstra);
 
-                dijkstra(start.first, max_len, parents, weights, distances);
+                dijkstra(start, max_len, parents, weights, distances);
 
                 TIMER_STOP(dijkstra);
 
@@ -154,7 +164,12 @@ namespace osrm
                 for(auto instance : distances){
                     node = instance.first;
                     distance = instance.second;
-                    if(distance > min_len && distance < max_len && graph.GetOutDegree(node) > 3 ){
+                    /*
+                     * if(distance > min_len && distance < max_len && graph.GetOutDegree(node) > 3 ){
+                     *  K.insert(node);
+                     * }
+                     */
+                    if(distance > min_len && distance < max_len){
                         K.insert(node);
                     }
                 }
@@ -172,29 +187,26 @@ namespace osrm
                  */
 
                 std::set<NodeID> H;
-                std::map<NodeID , std::map<NodeID ,NodeID>>candidate;
+                Map<NodeID , Map<NodeID ,NodeID>>candidate;
                 NodeID hp;
 
                 std::set<NodeID> Kn;
 
-                int i = 0;
                 for(auto p : K){
                     hp = p;
-                    while(distances[parents[hp]] > distances[p]*0.75){
+                    while(distances[parents[hp]] > distances[p]*0.5){
                         hp = parents[hp];
                     }
                     H.insert(hp);
                     candidate[hp][p] = p;
-                    i++;
                 }
 
-                util::Log() << "K.size() : " << i;
 
                 bestMidwayPoint = SPECIAL_NODEID;
                 bestWeight = INVALID_EDGE_WEIGHT;
+                bestDistance = 0;
 
-                int j = 0;
-                TIMER_START(findmidwaypoint);
+                TIMER_START(findmidwaypoints);
                 /**
                  *  DESCRIPTION
                  *
@@ -202,48 +214,43 @@ namespace osrm
                  *      FindMidwayPoint(h, w'[h], c'[h], candidate[h])
                  */
                 for(auto h : H){
-                    FindMidwayPoint(h, weights[h], distances[h], candidate[h]);
-                    j++;
+                    //TIMER_START(findmidwaypoint);
+                    SearchMidwayPoint(h, candidate[h]);
+                    //TIMER_STOP(findmidwaypoint);
+
                 }
-                TIMER_STOP(findmidwaypoint);
+                TIMER_STOP(findmidwaypoints);
 
-
-                util::Log() << "H.size() : " << j;
-
-                util::Log() << "FindMidwayPoint : " << TIMER_SEC(findmidwaypoint) << " seconds";
+                util::Log() << "FindMidwayPoint : " << TIMER_SEC(findmidwaypoints) << " seconds";
 
                 if(bestMidwayPoint == SPECIAL_NODEID || bestWeight == INVALID_EDGE_WEIGHT){
                     return Error("NoRoute", "No route found between points", json_result);
                 }
 
-                util::Log(logDEBUG) << "start: " << coordinate_list[start.first];
-
-                util::Log(logDEBUG) << "mid: " << coordinate_list[bestMidwayPoint];
-
-                for(NodeID node : P[bestMidwayPoint]){
-                    util::Log(logDEBUG) << "p: " << coordinate_list[node];
-                }
-
-
-                /**
-                 *
-                 */
-
                 api::TourParameters working_parameters = tour_parameters;
+
+
                 for(NodeID node : P[bestMidwayPoint]){
                     if(node == *P[bestMidwayPoint].begin()){
-                        working_parameters.coordinates.push_back(coordinate_list[node]);
-                        working_parameters.coordinates.push_back(coordinate_list[bestMidwayPoint]);
+
+                        auto osrm_p1 = nodes_of_interest[node];
+                        auto osrm_m = nodes_of_interest[bestMidwayPoint];
+
+                        working_parameters.coordinates.push_back(coordinate_list[osrm_p1]);
+                        working_parameters.coordinates.push_back(coordinate_list[osrm_m]);
                         working_parameters.hints.push_back(Hint());
                         working_parameters.hints.push_back(Hint());
                     }else{
-                        working_parameters.coordinates.push_back(coordinate_list[node]);
+
+                        auto osrm_p2 = nodes_of_interest[node];
+
+
+                        working_parameters.coordinates.push_back(coordinate_list[osrm_p2]);
                         working_parameters.coordinates.push_back(*working_parameters.coordinates.begin());
                         working_parameters.hints.push_back(Hint());
                         working_parameters.hints.push_back(Hint());
                     }
                 }
-
 
 
                 auto phantom_node_pairs = GetPhantomNodes(facade, working_parameters);
@@ -294,7 +301,6 @@ namespace osrm
                 };
                 util::for_each_pair(snapped_phantoms, build_phantom_pairs);
 
-
                 InternalRouteResult raw_route;
                 raw_route = algorithms.ShortestPathSearch(start_end_nodes, continue_straight_at_waypoint);
 
@@ -310,68 +316,75 @@ namespace osrm
                 return Status::Ok;
             }
 
-            void TourPlugin::FindMidwayPoint(NodeID s, EdgeWeight weight, EdgeDistance distance,
-                                             std::map<NodeID, NodeID> candidate) const {
 
-                std::map<NodeID , NodeID> parent;
-                std::map<NodeID , EdgeWeight> w;
-                std::map<NodeID , EdgeDistance> c;
+            void TourPlugin::SearchMidwayPoint(NodeID start, Map<NodeID, NodeID> candidate) const{
 
-                std::map<NodeID , EdgeWeight> weights;
+                Map<NodeID , NodeID> parent;
+                Map<NodeID , EdgeWeight> w;
+                Map<NodeID , EdgeDistance> c;
+
+                Map<NodeID , EdgeWeight> weights;
 
                 TourEdgeData data;
                 NodeID source, target;
                 QueryHeap queryHeap(graph.GetNumberOfNodes());
 
-                EdgeDistance max_len = (EdgeDistance)((1 + epsilon) * length / 4);
-                EdgeDistance min_len = (EdgeDistance)((1 - epsilon) * length / 4);
+                EdgeDistance haversineDistance_P1_P2;
+                EdgeDistance ways_length = INVALID_EDGE_DISTANCE;
+                EdgeWeight ways_weight = INVALID_EDGE_WEIGHT;
 
-                w[s] = weight;
-                c[s] = distance;
+                EdgeDistance max_len = (EdgeDistance)((1 + epsilon) * length / 2);
+                EdgeDistance min_len = (EdgeDistance)((1 - epsilon) * length / 2);
 
-                queryHeap.Insert(s, c[s], s);
+
+                w[start] = 0;
+                c[start] = 0;
+
+                queryHeap.Insert(start, w[start], start);
 
                 while (!queryHeap.Empty()) {
                     source = queryHeap.DeleteMin();
 
-                    for (const EdgeID edge : graph.GetAdjacentEdgeRange(source)) {
+                    for(const EdgeID edge : graph.GetAdjacentEdgeRange(source)){
                         data = (TourEdgeData &)graph.GetEdgeData(edge);
                         target = graph.GetTarget(edge);
 
-                        if(target == SPECIAL_NODEID) {
+                        if(target == SPECIAL_NODEID){
                             continue;
                         }
 
-                        EdgeDistance ways_lenght = c[source] + data.distance;
-                        EdgeWeight ways_weight = w[source] + data.weight;
-
-                        if(ways_lenght > max_len){
-                            continue;
-                        }
+                        ways_length = c[source] + data.distance;
+                        ways_weight = w[source] + data.weight;
 
                         if(!queryHeap.WasInserted(target)){
                             w[target] = ways_weight;
-                            c[target] = ways_lenght;
+                            c[target] = ways_length;
                             parent[target] = source;
-                            queryHeap.Insert(target, c[target], source);
-                        }else if(ways_lenght < c[target]){
+                            if(c[target] < max_len) {
+                                queryHeap.Insert(target, w[target], source);
+                            }
+                        }else if(ways_weight < w[target]){
                             w[target] = ways_weight;
-                            c[target] = ways_lenght;
+                            c[target] = ways_length;
                             parent[target] = source;
                             queryHeap.GetData(target).parent = source;
-                            queryHeap.DecreaseKey(target, c[target]);
+                            queryHeap.DecreaseKey(target, w[target]);
                         }
                     }
 
-
-                    if(candidate.find(source) == candidate.end()){
-                        candidate[source] = candidate[parent[source]];
+                    if(candidate.find(source) == candidate.end()) {
+                        candidate[source] = candidate.find(parent[source]) == candidate.end() ? SPECIAL_NODEID
+                                                                                              : candidate[parent[source]];
                     }
 
 
-                    if(c[source] > min_len && c[source] < max_len && candidate.find(source) != candidate.end()){
-                        P[source].insert(candidate[source]);
+                    /*
+                     * if(c[source] > min_len && c[source] < max_len
+                     * && graph.GetOutDegree(source) > 3 && candidate[source] != SPECIAL_NODEID){
+                     */
 
+                    if(c[source] > min_len && c[source] < max_len && candidate[source] != SPECIAL_NODEID){
+                        P[source].insert(candidate[source]);
                         weights[candidate[source]] = w[source];
 
                         if(P[source].size() > 2){
@@ -397,13 +410,121 @@ namespace osrm
                                 }
                             }
 
-                            if(weights[p1] + weights[p2] < bestWeight){
+
+                            NodeID osrm_p1 = nodes_of_interest[p1];
+                            NodeID osrm_p2 = nodes_of_interest[p2];
+
+                            haversineDistance_P1_P2 = (EdgeDistance)util::coordinate_calculation::haversineDistance(coordinate_list[osrm_p1], coordinate_list[osrm_p2]);
+                            if(haversineDistance_P1_P2 > bestDistance){
                                 bestMidwayPoint = source;
+                                bestDistance = haversineDistance_P1_P2;
+                                bestWeight = weights[p1] + weights[p2];
+                            }
+
+                        }
+                    }
+                }
+            }
+
+            void TourPlugin::FindMidwayPoint(NodeID s, Map<NodeID, NodeID> candidate) const {
+
+                Map<NodeID , NodeID> parent;
+                Map<NodeID , EdgeWeight> w;
+                Map<NodeID , EdgeDistance> c;
+
+                Map<NodeID , EdgeWeight> weights;
+
+                TourEdgeData data;
+                NodeID source, target;
+                QueryHeap queryHeap(graph.GetNumberOfNodes());
+
+                EdgeDistance max_len = (EdgeDistance)((1 + epsilon) * length / 2);
+                EdgeDistance min_len = (EdgeDistance)((1 - epsilon) * length / 2);
+
+                EdgeDistance ways_length = INVALID_EDGE_DISTANCE;
+                EdgeWeight ways_weight = INVALID_EDGE_WEIGHT;
+
+                EdgeDistance haversineDistance_P1_P2;
+
+                w[s] = 0;
+                c[s] = 0;
+
+                queryHeap.Insert(s, w[s], s);
+
+                while (!queryHeap.Empty()) {
+                    source = queryHeap.DeleteMin();
+
+                    for (const EdgeID edge : graph.GetAdjacentEdgeRange(source)) {
+                        data = (TourEdgeData &)graph.GetEdgeData(edge);
+                        target = graph.GetTarget(edge);
+
+                        if(target == SPECIAL_NODEID) {
+                            continue;
+                        }
+
+                        ways_length = c[source] + data.distance;
+                        ways_weight = w[source] + data.weight;
+
+                        if(!queryHeap.WasInserted(target)){
+                            w[target] = ways_weight;
+                            c[target] = ways_length;
+                            parent[target] = source;
+                            if(c[target] < max_len) {
+                                queryHeap.Insert(target, w[target], source);
+                            }
+                        }else if(ways_weight < w[target]){
+                            w[target] = ways_weight;
+                            c[target] = ways_length;
+                            parent[target] = source;
+                            queryHeap.GetData(target).parent = source;
+                            queryHeap.DecreaseKey(target, w[target]);
+                        }
+                    }
+
+                    if(candidate.find(source) == candidate.end()) {
+                        candidate[source] = candidate.find(parent[source]) == candidate.end() ? SPECIAL_NODEID
+                                                                                              : candidate[parent[source]];
+                    }
+
+                    /*
+                     * if(c[source] > min_len && c[source] < max_len
+                       && graph.GetOutDegree(source) > 3 && candidate[source] != SPECIAL_NODEID)
+                    */
+                    if(c[source] > min_len && c[source] < max_len && candidate[source] != SPECIAL_NODEID){
+                        P[source].insert(candidate[source]);
+                        weights[candidate[source]] = w[source];
+
+                        if(P[source].size() > 2){
+                            EdgeWeight max_weight = 0;
+                            NodeID to_delete = SPECIAL_NODEID;
+                            for(NodeID node : P[source]){
+                                if(max_weight < weights[node]){
+                                    max_weight = weights[node];
+                                    to_delete = node;
+                                }
+                            }
+                            P[source].erase(to_delete);
+                        }
+
+                        if(P[source].size() == 2){
+                            NodeID p1 = SPECIAL_NODEID, p2 = SPECIAL_NODEID;
+
+                            for(NodeID node : P[source]){
+                                if(p1 == SPECIAL_NODEID){
+                                    p1 = node;
+                                }else{
+                                    p2 = node;
+                                }
+                            }
+
+                            haversineDistance_P1_P2 = (EdgeDistance)util::coordinate_calculation::haversineDistance(coordinate_list[p1], coordinate_list[p2]);
+                            if(haversineDistance_P1_P2 > bestDistance){
+                                bestMidwayPoint = source;
+                                bestDistance = haversineDistance_P1_P2;
                                 bestWeight = weights[p1] + weights[p2];
                             }
                         }
                     }
-
                 }
             }
         }
