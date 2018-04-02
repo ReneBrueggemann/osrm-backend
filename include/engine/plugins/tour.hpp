@@ -7,6 +7,8 @@
 
 
 #include "engine/plugins/plugin_base.hpp"
+#include "engine/api/route_parameters.hpp"
+#include "engine/plugins/viaroute.hpp"
 #include "engine/engine_config.hpp"
 #include "engine/api/tour_api.hpp"
 #include "engine/datafacade/datafacade_base.hpp"
@@ -58,6 +60,8 @@ namespace osrm
                 TourEdgeData edgeData;
             };
 
+
+            using RouteParameters = engine::api::RouteParameters;
             using TourGraph = util::StaticGraph<TourEdgeData>;
             using TourEdge = TourGraph::InputEdge;
             using QueryHeap = util::
@@ -74,24 +78,22 @@ namespace osrm
                     std::vector<util::Coordinate> coordinate_list;
                     std::vector<NodeID> nodes_of_interest;
 
-                    TourGraph old_graph;
-                    TourGraph graph;
-                    mutable EdgeDistance length;
-                    mutable float epsilon;
-                    mutable NodeID bestMidwayPoint;
-                    mutable EdgeWeight bestWeight;
-                    mutable EdgeDistance bestDistance;
-                    mutable Map<NodeID , std::set<NodeID>> P;
-
+                    TourGraph forward_graph;
+                    TourGraph backward_graph;
+                    TourGraph original_graph;
+                    const ViaRoutePlugin route_plugin;
 
                 void dijkstra(NodeID start, const EdgeDistance length,
                               Map<NodeID, NodeID > &parent,
                               Map<NodeID , std::int32_t> &weight,
                               Map<NodeID , EdgeDistance> &distance) const;
 
-                void FindMidwayPoint(NodeID s, Map<NodeID ,NodeID> candidate) const;
-
-                void SearchMidwayPoint(NodeID s, Map<NodeID, NodeID> candidate) const;
+                void FindMidwayPoint(NodeID start, EdgeWeight w_h, EdgeDistance c_h ,
+                                     Map<NodeID, NodeID> candidate, TourGraph graph,
+                                     EdgeDistance &bestDistance, NodeID &bestMidwayPoint,
+                                     EdgeWeight &bestWeight, Map<NodeID , Map<NodeID ,EdgeWeight>> &weights,
+                                     EdgeDistance length, float epsilon, Map<NodeID , std::set<NodeID>> &P,
+                                     bool original) const;
 
                 NodeID SearchNearestNodeOfInterest(util::Coordinate coordinate) const;
 
@@ -184,7 +186,6 @@ namespace osrm
                             continue;
                         }
 
-                        // TODO: CONTRACTION PROCESS
                         distance = util::coordinate_calculation::haversineDistance(coordinate_list[input_edge.source],
                                                                                    coordinate_list[input_edge.target]);
 
@@ -205,8 +206,14 @@ namespace osrm
                     graph = TourGraph(number_of_nodes, graph_edge_list);
                 }
 
+                void loadTourGraph(TourGraph &new_graph, TourGraph &graph){
+                    for(NodeID i = 0; i < graph.GetNumberOfNodes(); i++){
+                            nodes_of_interest.emplace_back(i);
+                    }
+                    new_graph = graph;
+                }
 
-                void loadTourGraph(TourGraph &graph, TourGraph &new_graph, const unsigned int degree)
+                void loadTourGraph(TourGraph &new_graph, TourGraph &graph, const unsigned int degree)
                 {
                     std::vector<TourEdge> graph_edge_list;
 
@@ -235,9 +242,9 @@ namespace osrm
                         // PROGRESS IMPROVE OUT
                         if(id > step*0.1*nodes_of_interest.size()){
                             step++;
-                            if(step == 1) std::cout << step * 10 << "%\r";
-                            else if(step == 10) std::cout << " - " << step * 10 << "%\r\n";
-                            else std::cout << " - " << step * 10 << "%\r";
+                            if(step == 1) std::cout << (step-1) * 10 << "%\r";
+                            else if(step == 10) std::cout << " - " << (step-1) * 10 << "%\r\n";
+                            else std::cout << " - " << (step-1) * 10 << "%\r";
                             std::cout.flush();
                         }
 
@@ -268,17 +275,45 @@ namespace osrm
                     new_graph = TourGraph(nodes_of_interest.size(), graph_edge_list);
                 }
 
+                void TourGraphReverse(TourGraph &new_graph, TourGraph &graph)
+                {
+                    std::vector<TourEdge> graph_edge_list;
+
+                    for(auto node : nodes_of_interest){
+                        for(auto edge : graph.GetAdjacentEdgeRange(node)) {
+                            auto data = (TourEdgeData &)forward_graph.GetEdgeData(edge);
+                            graph_edge_list.emplace_back(graph.GetTarget(edge), node, data.weight,
+                                                         data.distance);
+                        }
+                    }
+                    tbb::parallel_sort(graph_edge_list.begin(), graph_edge_list.end());
+                    new_graph = TourGraph(graph.GetNumberOfNodes(), graph_edge_list);
+                }
+
                 public:
-                    explicit TourPlugin(const storage::StorageConfig storageConfig_): storageConfig(storageConfig_){
-                        loadGraph(storageConfig.base_path.string(), old_graph);
+                    explicit TourPlugin(const storage::StorageConfig storageConfig_, int max_locations_viaroute_):
+                            storageConfig(storageConfig_),route_plugin(max_locations_viaroute_){
+
+                        std::vector<TourEdge> edge_list;
+                        loadGraph(storageConfig.base_path.string(), original_graph);
+                        util::Log() << "In OSRM";
+                        util::Log() << "(original) Number of Nodes: " << original_graph.GetNumberOfNodes();
+                        util::Log() << "(original) Number of Edges: " << original_graph.GetNumberOfEdges();
+
                         util::Log() << "Start to reduce the graph";
-                        TIMER_START(load);
-                        //loadGraph(storageConfig.base_path.string(), graph);
-                        loadTourGraph(old_graph, graph, 3);
-                        TIMER_STOP(load);
-                        util::Log() << "Load the Graph took: " << TIMER_MIN(load) << "min and " << (int)TIMER_SEC(load) % 60 << " sec";
-                        util::Log() << "Number of Nodes: " << graph.GetNumberOfNodes();
-                        util::Log() << "Number of Edges: " << graph.GetNumberOfEdges();
+
+                        TIMER_START(core);
+                        loadTourGraph(forward_graph, original_graph);
+                        TIMER_STOP(core);
+
+                        util::Log() << "Reduce took: " << TIMER_MIN(core) << "min and " << (int)TIMER_SEC(core) % 60 << " sec";
+                        util::Log() << "(forward) Number of Nodes: " << forward_graph.GetNumberOfNodes();
+                        util::Log() << "(forward) Number of Edges: " << forward_graph.GetNumberOfEdges();
+
+                       // TourGraphReverse(backward_graph, forward_graph);
+
+                        util::Log() << "Reverse done";
+
                     }
 
                     Status HandleRequest(const datafacade::ContiguousInternalMemoryDataFacadeBase &facade,
